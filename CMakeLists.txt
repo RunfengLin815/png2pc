@@ -23,3 +23,6 @@ add_definitions(${PCL_DEFINITIONS})
 target_link_libraries(png2pc ${PCL_LIBRARIES})
 target_link_libraries(png2pc ${VTK_LIBRARIES})
 target_link_libraries(png2pc pcl_common pcl_io pcl_visualization)
+
+find_package(Eigen3 REQUIRED)
+include_directories(${Eigen3_INCLUDE_DIRS})

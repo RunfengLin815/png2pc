@@ -8,6 +8,7 @@
 #include <pcl-1.13/pcl/visualization/pcl_visualizer.h>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
+#include <eigen3/Eigen/Dense>
 
 using namespace std;
 
@@ -16,19 +17,34 @@ typedef pcl::PointCloud<PointT> PointCloud;
 
 // declaration
 PointCloud::Ptr cloudGenerator(string path_rgb, string path_depth);
+
 void saveAsPly(PointCloud::Ptr cloud, string path_cloud);
+
+Eigen::Matrix4d cameraTrajectory(const string &filename);
 
 int main(int argc, char **argv) {
     // Load RGB image and depth image
     string path_rgb = "/home/linrunfeng/Lab/data/shelter-demo/rgb/900.png";
     string path_depth = "/home/linrunfeng/Lab/data/shelter-demo/depth/900.png";
 
+    // directory
+    string dir_rgb = "/home/linrunfeng/Lab/data/shelter-demo/rgb/";
+    string dir_depth = "/home/linrunfeng/Lab/data/shelter-demo/depth/";
+
+    // read pose
+    string file_camera_trajectory = "/home/linrunfeng/Lab/shelter-reconstrustion/ManhattanSLAM/CameraTrajectory.txt";
+    string file_keyframe_trajectory = "/home/linrunfeng/Lab/shelter-reconstrustion/ManhattanSLAM/KeyFrameTrajectory.txt";
+
+    // test camera traj
+
+    cameraTrajectory(file_camera_trajectory);
+
     // save to where
-    string path_save = "/home/linrunfeng/Lab/data/shelter-demo/cloud_test.ply";
+    // string path_save = "/home/linrunfeng/Lab/data/shelter-demo/cloud_test.ply";
 
     // test for on image
-    PointCloud::Ptr pointCloud = cloudGenerator(path_rgb, path_depth);
-    saveAsPly(pointCloud, path_save);
+    // PointCloud::Ptr pointCloud = cloudGenerator(path_rgb, path_depth);
+    // saveAsPly(pointCloud, path_save);
 
 
     // Visualize point cloud
@@ -82,4 +98,43 @@ void saveAsPly(PointCloud::Ptr cloud, string path_cloud) {
 
     // print
     std::cout << "Save point cloud to " << path_cloud << " ." << std::endl;
+}
+
+Eigen::Matrix4d cameraTrajectory(const string &filename) {
+    std::ifstream file(filename);
+    if (!file) {
+        std::cerr << "Error opening file " << filename << std::endl;
+        exit(1);
+    }
+
+    Eigen::Matrix4d trajectory = Eigen::Matrix4d::Identity();
+    vector<Eigen::Matrix4d> v_trajectory;
+
+    std::string line;
+    double time, tx, ty, tz, qx, qy, qz, qw;
+    while (std::getline(file, line)) {
+        std::stringstream ss(line);
+        ss >> time >> tx >> ty >> tz >> qx >> qy >> qz >> qw;
+
+        // Convert quaternion to rotation matrix
+        Eigen::Quaterniond q(qw, qx, qy, qz);
+        Eigen::Matrix3d R = q.toRotationMatrix();
+
+        // Construct 4x4 transformation matrix
+        Eigen::Matrix4d T = Eigen::Matrix4d::Identity();
+        T.block<3, 3>(0, 0) = R;
+        T.block<3, 1>(0, 3) << tx, ty, tz;
+
+        // Append to trajectory matrix
+        trajectory *= T;
+        v_trajectory.push_back(trajectory);
+    }
+    file.close();
+
+    for (int i = 0; i < 10; i++) {
+        cout << v_trajectory[i] << endl;
+    }
+
+    return trajectory;
+
 }
