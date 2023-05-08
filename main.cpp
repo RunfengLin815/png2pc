@@ -20,7 +20,7 @@ PointCloud::Ptr cloudGenerator(string path_rgb, string path_depth);
 
 void saveAsPly(PointCloud::Ptr cloud, string path_cloud);
 
-Eigen::Matrix4d cameraTrajectory(const string &filename);
+vector<Eigen::Matrix4d> readTrajectory(const string &filename);
 
 int main(int argc, char **argv) {
     // Load RGB image and depth image
@@ -36,8 +36,12 @@ int main(int argc, char **argv) {
     string file_keyframe_trajectory = "/home/linrunfeng/Lab/shelter-reconstrustion/ManhattanSLAM/KeyFrameTrajectory.txt";
 
     // test camera traj
+    vector<Eigen::Matrix4d> v_trajectory_camera;
+    vector<Eigen::Matrix4d> v_trajectory_keyframe;
+    v_trajectory_camera = readTrajectory(file_camera_trajectory);
+    v_trajectory_keyframe = readTrajectory(file_keyframe_trajectory);
 
-    cameraTrajectory(file_camera_trajectory);
+
 
     // save to where
     // string path_save = "/home/linrunfeng/Lab/data/shelter-demo/cloud_test.ply";
@@ -100,7 +104,7 @@ void saveAsPly(PointCloud::Ptr cloud, string path_cloud) {
     std::cout << "Save point cloud to " << path_cloud << " ." << std::endl;
 }
 
-Eigen::Matrix4d cameraTrajectory(const string &filename) {
+vector<Eigen::Matrix4d> readTrajectory(const string &filename) {
     std::ifstream file(filename);
     if (!file) {
         std::cerr << "Error opening file " << filename << std::endl;
@@ -131,10 +135,10 @@ Eigen::Matrix4d cameraTrajectory(const string &filename) {
     }
     file.close();
 
-    for (int i = 0; i < 10; i++) {
-        cout << v_trajectory[i] << endl;
-    }
+//    for (int i = 0; i < 10; i++) {
+//        cout << v_trajectory[i] << endl;
+//    }
 
-    return trajectory;
+    return v_trajectory;
 
 }
