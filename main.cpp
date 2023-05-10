@@ -8,6 +8,7 @@
 #include <pcl-1.13/pcl/io/ply_io.h>
 #include <pcl-1.13/pcl/visualization/pcl_visualizer.h>
 #include <pcl-1.13/pcl/registration/ndt.h>
+#include <pcl-1.13/pcl/filters/voxel_grid.h>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <eigen3/Eigen/Dense>
@@ -68,6 +69,16 @@ int main(int argc, char **argv) {
         // print
         cout << "No.[" << i << "/" << timestamp.size() - 1 << "] point cloud completed." << endl;
     }
+
+    // down sampling
+    // Create a VoxelGrid object
+    pcl::VoxelGrid<PointT> sor;
+    sor.setInputCloud(cloud_final);
+    sor.setLeafSize(0.01f, 0.01f, 0.01f);
+
+    // do
+    PointCloud::Ptr cloud_ds(new PointCloud);
+    sor.filter(*cloud_ds);
 
     // save
     string path_save = "/home/linrunfeng/Lab/data/shelter-demo/cloud_final.ply";
