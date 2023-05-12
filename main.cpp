@@ -9,6 +9,9 @@
 #include <pcl-1.13/pcl/visualization/pcl_visualizer.h>
 #include <pcl-1.13/pcl/registration/ndt.h>
 #include <pcl-1.13/pcl/filters/voxel_grid.h>
+//#include <pcl-1.13/pcl/filters/radius_outlier_removal.h>
+#include <pcl-1.13/pcl/filters/passthrough.h>
+
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <eigen3/Eigen/Dense>
@@ -29,63 +32,92 @@ void readTrajectory_1(const string &filename, vector<Eigen::Matrix4d> *v_traject
 int countFiles(string dir_path);
 
 int main(int argc, char **argv) {
-    // Load RGB image and depth image
-    string path_rgb = "/home/linrunfeng/Lab/data/shelter-demo/rgb/900.png";
-    string path_depth = "/home/linrunfeng/Lab/data/shelter-demo/depth/900.png";
-
     // directory
     string dir_rgb = "/home/linrunfeng/Lab/data/shelter-demo/rgb/";
     string dir_depth = "/home/linrunfeng/Lab/data/shelter-demo/depth/";
 
     // read pose (only keyframe)
-//    string file_camera_trajectory = "/home/linrunfeng/Lab/shelter-reconstrustion/ManhattanSLAM/CameraTrajectory.txt";
+    // string file_camera_trajectory = "/home/linrunfeng/Lab/shelter-reconstrustion/ManhattanSLAM/CameraTrajectory.txt";
     string file_keyframe_trajectory = "/home/linrunfeng/Lab/shelter-reconstrustion/ManhattanSLAM/KeyFrameTrajectory.txt";
     vector<Eigen::Matrix4d> v_trajectory_keyframe;
     vector<int> timestamp;
     readTrajectory(file_keyframe_trajectory, &v_trajectory_keyframe, &timestamp);
-//    for (int j = 0; j < 5; j++) { cout << timestamp[j] << endl; }
 
-
-    // point of final scene
+    // point cloud
     PointCloud::Ptr cloud_final(new PointCloud);
+    PointCloud::Ptr cloud(new PointCloud);
+    PointCloud::Ptr cloud_tf(new PointCloud);
+    PointCloud::Ptr cloud_filtered(new PointCloud);
+
+//    pcl::RadiusOutlierRemoval<PointT> ror;
+//    ror.setRadiusSearch(0.5);
+//    ror.setMinNeighborsInRadius(100);
+    // passthrough filter
+    pcl::PassThrough<PointT> pass;
+    pass.setFilterFieldName("z");
+    pass.setFilterLimits(0.0, 1.5);
+
 
     // read all png in timestamp from keyframes
     for (int i = 0; i < timestamp.size(); i++) {
+
+        cout << "No.[" << i + 1 << "/" << timestamp.size() << "] point cloud started..." << endl;
+
         // set file name
         string filename_rgb = dir_rgb + to_string(timestamp[i]) + ".png";
         string filename_depth = dir_depth + to_string(timestamp[i]) + ".png";
 
         // generate point cloud
-        PointCloud::Ptr cloud(new PointCloud);
+        cout << "Start generating..." << endl;
         cloud = cloudGenerator(filename_rgb, filename_depth);
 
+        //
+        if (i % 50 == 0) {
+            string path_save = "/home/linrunfeng/Lab/data/shelter-demo/cloud-single/cloud_" + to_string(i) + ".ply";
+            saveAsPly(cloud,path_save);
+        }
+
+        // radius outlier
+        cout << "Start filtering..." << " cloud size: " << cloud->size() << endl;
+        pass.setInputCloud(cloud);
+        pass.filter(*cloud_filtered);
+
         // transfer by trajectory
-        PointCloud::Ptr cloud_tf(new PointCloud);
-        pcl::transformPointCloud(*cloud, *cloud_tf, v_trajectory_keyframe[i]);
+        cout << "Start transfer..." << " cloud_filtered size: " << cloud_filtered->size() << endl;
+        pcl::transformPointCloud(*cloud_filtered, *cloud_tf, v_trajectory_keyframe[i]);
 
         // add to final scene
+        cout << "Start adding..." << " cloud_transfer size: " << cloud_tf->size() << endl;
         *cloud_final += *cloud_tf;
 
         // print
-        cout << "No.[" << i << "/" << timestamp.size() - 1 << "] point cloud completed." << endl;
+        cout << "No.[" << i + 1 << "/" << timestamp.size() << "] point cloud completed." << endl;
+
+        // clear
+        cloud->clear();
+        cloud_tf->clear();
+        cloud_filtered->clear();
     }
+
+    cout << "before ds: " << cloud_final->size() << endl;
 
     // down sampling
     // Create a VoxelGrid object
     pcl::VoxelGrid<PointT> sor;
     sor.setInputCloud(cloud_final);
-    sor.setLeafSize(0.01f, 0.01f, 0.01f);
+    const float leafSize = 0.005f;
+    sor.setLeafSize(leafSize, leafSize, leafSize);
 
     // do
     PointCloud::Ptr cloud_ds(new PointCloud);
     sor.filter(*cloud_ds);
 
+    cout << "after ds: " << cloud_ds->size() << endl;
+
     // save
     string path_save = "/home/linrunfeng/Lab/data/shelter-demo/cloud_final.ply";
-    saveAsPly(cloud_final, path_save);
+    saveAsPly(cloud_ds, path_save);
 
-    // Visualize point cloud
-    //pcl::visualization::PCLVisualizer viewer("Point Cloud Viewer");
 }
 
 PointCloud::Ptr cloudGenerator(string path_rgb, string path_depth) {
@@ -207,9 +239,8 @@ void readTrajectory(const string &filename, vector<Eigen::Matrix4d> *v_trajector
         T.topLeftCorner(3, 3) = R;
         T.topRightCorner(3, 1) = t;
 
+
         // Append to trajectory matrix
-//        trajectory *= T;
-//        v_trajectory->push_back(trajectory);
         v_trajectory->push_back(T);
 
         // update
