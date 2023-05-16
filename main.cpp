@@ -18,7 +18,7 @@
 
 using namespace std;
 
-typedef pcl::PointXYZRGBA PointT;
+typedef pcl::PointXYZRGB PointT;
 typedef pcl::PointCloud<PointT> PointCloud;
 
 // declaration
@@ -27,18 +27,20 @@ PointCloud::Ptr cloudGenerator(string path_rgb, string path_depth);
 void saveAsPly(PointCloud::Ptr cloud, string path_cloud);
 
 void readTrajectory(const string &filename, vector<Eigen::Matrix4d> *v_trajectory, vector<int> *v_timestamp);
-void readTrajectory_1(const string &filename, vector<Eigen::Matrix4d> *v_trajectory, vector<int> *v_timestamp);
 
 int countFiles(string dir_path);
 
 int main(int argc, char **argv) {
     // directory
-    string dir_rgb = "/home/linrunfeng/Lab/data/shelter-demo/rgb/";
-    string dir_depth = "/home/linrunfeng/Lab/data/shelter-demo/depth/";
+    string path_save_root = "/home/linrunfeng/Lab/data/shelter-demo/";
+//    string path_save_root = "/home/linrunfeng/Lab/data/ICL-NUIM/living_room/lr_kt0/";
+    string dir_rgb = path_save_root + "rgb/";
+    string dir_depth = path_save_root + "depth/";
 
     // read pose (only keyframe)
-    // string file_camera_trajectory = "/home/linrunfeng/Lab/shelter-reconstrustion/ManhattanSLAM/CameraTrajectory.txt";
     string file_keyframe_trajectory = "/home/linrunfeng/Lab/shelter-reconstrustion/ManhattanSLAM/KeyFrameTrajectory.txt";
+//    string file_keyframe_trajectory = "/home/linrunfeng/Lab/data/ICL-NUIM/living_room/lr_kt0/livingRoom0.gt.freiburg";
+
     vector<Eigen::Matrix4d> v_trajectory_keyframe;
     vector<int> timestamp;
     readTrajectory(file_keyframe_trajectory, &v_trajectory_keyframe, &timestamp);
@@ -49,19 +51,17 @@ int main(int argc, char **argv) {
     PointCloud::Ptr cloud_tf(new PointCloud);
     PointCloud::Ptr cloud_filtered(new PointCloud);
 
-//    pcl::RadiusOutlierRemoval<PointT> ror;
-//    ror.setRadiusSearch(0.5);
-//    ror.setMinNeighborsInRadius(100);
     // passthrough filter
     pcl::PassThrough<PointT> pass;
     pass.setFilterFieldName("z");
-    pass.setFilterLimits(0.0, 1.5);
+    pass.setFilterLimits(0.0, 1.5); // 1.5 / 15(icl)
 
 
-    // read all png in timestamp from keyframes
-    for (int i = 0; i < timestamp.size(); i++) {
+    // read all png in timestamp from keyframe
+    int for_len = 20; // for_len = timestamp.size();
+    for (int i = 0; i < for_len; i++) {
 
-        cout << "No.[" << i + 1 << "/" << timestamp.size() << "] point cloud started..." << endl;
+        cout << "No.[" << i + 1 << "/" << for_len << "] point cloud started..." << endl;
 
         // set file name
         string filename_rgb = dir_rgb + to_string(timestamp[i]) + ".png";
@@ -71,16 +71,16 @@ int main(int argc, char **argv) {
         cout << "Start generating..." << endl;
         cloud = cloudGenerator(filename_rgb, filename_depth);
 
-        //
-        if (i % 50 == 0) {
-            string path_save = "/home/linrunfeng/Lab/data/shelter-demo/cloud-single/cloud_" + to_string(i) + ".ply";
-            saveAsPly(cloud,path_save);
-        }
-
         // radius outlier
         cout << "Start filtering..." << " cloud size: " << cloud->size() << endl;
         pass.setInputCloud(cloud);
         pass.filter(*cloud_filtered);
+
+        // save every 10 key frame
+        if (i % 10 == 0) {
+            string path_save = path_save_root + "cloud-single/cloud_" + to_string(i) + ".ply";
+            saveAsPly(cloud,path_save);
+        }
 
         // transfer by trajectory
         cout << "Start transfer..." << " cloud_filtered size: " << cloud_filtered->size() << endl;
@@ -88,10 +88,10 @@ int main(int argc, char **argv) {
 
         // add to final scene
         cout << "Start adding..." << " cloud_transfer size: " << cloud_tf->size() << endl;
-        *cloud_final += *cloud_tf;
+        *cloud_final = *cloud_final + *cloud_tf;
 
         // print
-        cout << "No.[" << i + 1 << "/" << timestamp.size() << "] point cloud completed." << endl;
+        cout << "No.[" << i + 1 << "/" << for_len << "] point cloud completed." << endl;
 
         // clear
         cloud->clear();
@@ -115,8 +115,7 @@ int main(int argc, char **argv) {
     cout << "after ds: " << cloud_ds->size() << endl;
 
     // save
-    string path_save = "/home/linrunfeng/Lab/data/shelter-demo/cloud_final.ply";
-    saveAsPly(cloud_ds, path_save);
+    saveAsPly(cloud_ds, path_save_root + "cloud_final.ply");
 
 }
 
@@ -126,6 +125,11 @@ PointCloud::Ptr cloudGenerator(string path_rgb, string path_depth) {
     float fy = 606.691f; // focal length y
     float cx = 315.016f; // optical center x
     float cy = 234.613f; // optical center y
+//    float fx = 481.2; // focal length x
+//    float fy = -480; // focal length y
+//    float cx = 319.5; // optical center x
+//    float cy = 239.50; // optical center y
+
 
     // Load RGB image and depth image
     cv::Mat img_rgb = cv::imread(path_rgb);
@@ -142,9 +146,9 @@ PointCloud::Ptr cloudGenerator(string path_rgb, string path_depth) {
         PointT &point = cloud->points[i];
 
         // Get RGB color
-        point.r = img_rgb.at<cv::Vec3b>(i)[2];
+        point.r = img_rgb.at<cv::Vec3b>(i)[0];
         point.g = img_rgb.at<cv::Vec3b>(i)[1];
-        point.b = img_rgb.at<cv::Vec3b>(i)[0];
+        point.b = img_rgb.at<cv::Vec3b>(i)[2];
 
         // Get depth value
         uint16_t depth_value = img_depth.at<uint16_t>(i);
@@ -166,40 +170,6 @@ void saveAsPly(PointCloud::Ptr cloud, string path_cloud) {
 
     // print
     std::cout << "Save point cloud to " << path_cloud << " ." << std::endl;
-}
-
-void readTrajectory_1(const string &filename, vector<Eigen::Matrix4d> *v_trajectory, vector<int> *v_timestamp) {
-    std::ifstream file(filename);
-    if (!file) {
-        std::cerr << "Error opening file " << filename << std::endl;
-        exit(1);
-    }
-
-    Eigen::Matrix4d trajectory = Eigen::Matrix4d::Identity();
-    std::string line;
-    double time, tx, ty, tz, qx, qy, qz, qw;
-    while (std::getline(file, line)) {
-        std::stringstream ss(line);
-        ss >> time >> tx >> ty >> tz >> qx >> qy >> qz >> qw;
-
-        // Convert quaternion to rotation matrix
-        Eigen::Quaterniond q(qw, qx, qy, qz);
-        Eigen::Matrix3d R = q.toRotationMatrix();
-
-        // Construct 4x4 transformation matrix
-        Eigen::Matrix4d T = Eigen::Matrix4d::Identity();
-        T.block<3, 3>(0, 0) = R;
-        T.block<3, 1>(0, 3) << tx, ty, tz;
-
-        // Append to trajectory matrix
-        trajectory *= T;
-        v_trajectory->push_back(trajectory);
-
-        // update
-        v_timestamp->push_back(time);
-    }
-    file.close();
-
 }
 
 int countFiles(string dir_path) {
@@ -236,8 +206,13 @@ void readTrajectory(const string &filename, vector<Eigen::Matrix4d> *v_trajector
         Eigen::Matrix4d T = Eigen::Matrix4d::Identity();
 //        T.block<3, 3>(0, 0) = R;
 //        T.block<3, 1>(0, 3) << tx, ty, tz;
+//        T.topLeftCorner(3, 3) = R.transpose();
+//        T.topRightCorner(3, 1) = -R.transpose() * t;
         T.topLeftCorner(3, 3) = R;
         T.topRightCorner(3, 1) = t;
+
+        //
+        cout << "Time: " << time << "\n" << T << endl;
 
 
         // Append to trajectory matrix
